@@ -1,1 +1,249 @@
+---
+title: "Quantile Regression for Population Health Analysis"
+author: "Arash Ard"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+```
+
+knitr::opts_chunk$set(
+echo = TRUE,
+message = FALSE,
+warning = FALSE
+)
+```
+
+## 1. Overview
+
+This notebook demonstrates a clean, reproducible approach to analysing health-related outcomes using **quantile regression**.
+Unlike mean regression, quantile regression helps us understand how associations differ across the **full distribution** of an outcome (e.g., BMI), which is often important in population health.
+
+### Data disclaimer
+
+The dataset used in this analysis is an **anonymised subset (n = 1000)** derived from a larger adolescent health study.
+Only a limited set of variables was retained, identifiers were removed, and the data is used solely for demonstrating analytical workflows.
+
+---
+
+## 2. Libraries
+
+library(tidyverse)
+library(ggplot2)
+library(quantreg)
+library(broom)
+
+---
+
+## 3. Load data
+
+Place your CSV here: `data/health_sample_data_1000.csv`
+
+df <- read.csv("data/health_sample_data_1000.csv")
+
+glimpse(df)
+summary(df)
+
+### Basic cleaning / typing
+
+df <- df %>%
+mutate(
+Gender = factor(Gender),
+city = factor(city),
+activity = factor(activity),
+parent_obese_father = factor(parent_obese_father),
+parent_obese_mother = factor(parent_obese_mother)
+) %>%
+filter(
+is.finite(bmi),
+is.finite(body_fat),
+is.finite(age)
+)
+
+# Quick missingness check
+
+miss_rate <- sapply(df, function(x) mean(is.na(x)))
+miss_rate
+
+---
+
+## 4. Exploratory data analysis (EDA)
+
+### 4.1 BMI distribution overall and by gender
+
+ggplot(df, aes(x = bmi)) +
+geom_histogram(bins = 30) +
+labs(title = "BMI distribution", x = "BMI", y = "Count")
+
+ggplot(df, aes(x = bmi, fill = Gender)) +
+geom_histogram(bins = 30, alpha = 0.6, position = "identity") +
+labs(title = "BMI distribution by gender", x = "BMI", y = "Count")
+
+### 4.2 Summary table by gender
+
+df %>%
+group_by(Gender) %>%
+summarise(
+n = n(),
+bmi_mean = mean(bmi, na.rm = TRUE),
+bmi_sd = sd(bmi, na.rm = TRUE),
+bf_mean = mean(body_fat, na.rm = TRUE),
+bf_sd = sd(body_fat, na.rm = TRUE),
+age_mean = mean(age, na.rm = TRUE),
+.groups = "drop"
+)
+
+### 4.3 Relationship plots (simple and interpretable)
+
+ggplot(df, aes(x = body_fat, y = bmi)) +
+geom_point(alpha = 0.4) +
+geom_smooth(method = "lm", se = TRUE) +
+labs(title = "BMI vs Body Fat", x = "Body fat", y = "BMI")
+
+ggplot(df, aes(x = muscle_thickness, y = bmi, color = Gender)) +
+geom_point(alpha = 0.4) +
+geom_smooth(method = "lm", se = TRUE) +
+labs(title = "BMI vs Muscle Thickness (by gender)", x = "Muscle thickness", y = "BMI")
+
+---
+
+## 5. Quantile regression
+
+### 5.1 Why quantile regression?
+
+Mean-based models can miss important differences between lower-risk and higher-risk groups.
+Quantile regression estimates associations at different points (quantiles) of the outcome distribution.
+
+We’ll model **BMI** using:
+
+* body_fat
+* muscle_thickness
+* waist_hip_avg
+* parental obesity indicators
+* age, Gender, city, activity
+
+taus <- c(0.1, 0.25, 0.5, 0.75, 0.9)
+
+formula_qr <- bmi ~ body_fat + muscle_thickness + waist_hip_avg +
+parent_obese_father + parent_obese_mother +
+age + Gender + city + activity
+
+### 5.2 Fit quantile regression across multiple taus
+
+qr_fit <- rq(formula_qr, tau = taus, data = df)
+qr_fit
+
+### 5.3 Summaries (one tau example + general view)
+
+summary(qr_fit, se = "nid")
+
+If you want a single tau (median regression):
+
+qr_med <- rq(formula_qr, tau = 0.5, data = df)
+summary(qr_med, se = "nid")
+
+---
+
+## 6. Coefficient trends across quantiles (key portfolio plot)
+
+We’ll extract coefficients across quantiles and visualise how effects change.
+
+coef_df <- tidy(qr_fit) %>%
+filter(term != "(Intercept)")
+
+head(coef_df)
+
+ggplot(coef_df, aes(x = tau, y = estimate, group = term, color = term)) +
+geom_line() +
+geom_point() +
+labs(
+title = "Quantile regression coefficients across BMI distribution",
+x = "Quantile (tau)",
+y = "Coefficient estimate"
+)
+
+### Optional: Focused plot for key predictors only
+
+key_terms <- c("body_fat", "muscle_thickness", "waist_hip_avg",
+"parent_obese_fatherYes", "parent_obese_motherYes")
+
+coef_df_key <- coef_df %>% filter(term %in% key_terms)
+
+ggplot(coef_df_key, aes(x = tau, y = estimate, group = term, color = term)) +
+geom_line() +
+geom_point() +
+labs(
+title = "Key predictors: coefficient trends across quantiles",
+x = "Quantile (tau)",
+y = "Coefficient estimate"
+)
+
+---
+
+## 7. Plain-English interpretation (portfolio-quality)
+
+### What to look for
+
+* If the coefficient for **body_fat** increases at higher quantiles, that suggests stronger association among higher-BMI individuals.
+* If parental obesity indicators have larger effects at upper quantiles, that indicates stronger family-risk association in the higher-risk group.
+* If effects are stable across quantiles, the relationship is similar across the distribution.
+
+# Quick table of coefficients by tau for a few key terms
+
+coef_table <- coef_df_key %>%
+select(tau, term, estimate) %>%
+pivot_wider(names_from = tau, values_from = estimate)
+
+coef_table
+
+**Interpretation notes (write in your own words after viewing results):**
+
+* Describe which predictors are consistently positive/negative.
+* Highlight any predictor whose effect grows towards tau = 0.75–0.9.
+* Be explicit: this is **association**, not causation.
+
+---
+
+## 8. Optional extension: Logistic regression (simple and relevant)
+
+Create a binary outcome: “High BMI” based on a threshold (example: BMI ≥ 25).
+(If you prefer, use a domain-appropriate threshold for your context.)
+
+df <- df %>%
+mutate(high_bmi = factor(ifelse(bmi >= 25, "Yes", "No")))
+
+table(df$high_bmi)
+
+glm_fit <- glm(
+high_bmi ~ body_fat + muscle_thickness + waist_hip_avg +
+parent_obese_father + parent_obese_mother +
+age + Gender + city + activity,
+family = binomial(link = "logit"),
+data = df
+)
+
+summary(glm_fit)
+
+---
+
+## 9. Limitations & good practice
+
+* This is observational data: **no causal claims**.
+* Results can be sensitive to measurement error and unobserved confounding.
+* Always validate assumptions and consider robustness checks (e.g., alternative specifications, sensitivity analysis).
+* The shared dataset is an anonymised subset intended for demonstrating methods.
+
+---
+
+## 10. Conclusion
+
+This project demonstrates an end-to-end workflow for:
+
+* preparing health-related data,
+* exploring structure and patterns,
+* applying quantile regression to understand distributional effects,
+* and communicating results clearly for stakeholders.
+
 

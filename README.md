@@ -1,20 +1,22 @@
-# quantile-regression-health-analysis
-Demonstration of quantile regression for population health analysis, focusing on interpretable statistical modelling, exploratory analysis, and clear communication of results.
+# Quantile Regression for Population Health Analysis (R)
 
+This repository demonstrates a clean, reproducible workflow for analysing health-related outcomes using **quantile regression** in R.
 
-# Quantile Regression for Population Health Analysis
+## What this project shows
+- Data preparation and sensible feature selection
+- Exploratory analysis with clear visualisation
+- Quantile regression (effects across the outcome distribution)
+- Interpretation in plain language
+- Basic modelling extension (logistic regression example)
 
-This project demonstrates the use of quantile regression to analyse
-health outcomes across their full distribution, using a synthetic
-adolescent health dataset.
+## Data
+The dataset used here is an **anonymised subset (n = 1000)** derived from a larger adolescent health study.
+Only a limited set of anthropometric, demographic, and family-level variables were retained, and identifiers were removed.
+The data is shared solely for demonstrating analytical workflows.
 
-**Focus:**
-- Population health analytics
-- Quantile regression
-- Interpretation beyond the mean
-- Ethical and reproducible analysis
+## Tools
+R, tidyverse, ggplot2, quantreg, broom
 
-**Tools:** Python / R, pandas, NumPy, statsmodels / quantreg
-
-This repository is intended as a portfolio example for
-data science and analytics consulting roles.
+## Files
+- `quantile_regression_health_analysis.Rmd` – main analysis
+- `data/health_sample_data_1000.csv` – anonymised sample used in the notebook

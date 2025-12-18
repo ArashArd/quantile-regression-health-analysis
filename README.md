@@ -20,3 +20,11 @@ R, tidyverse, ggplot2, quantreg, broom
 ## Files
 - `quantile_regression_health_analysis.Rmd` – main analysis
 - `data/health_sample_data_1000.csv` – anonymised sample used in the notebook
+
+- ## Results snapshot
+
+The analysis shows that associations between body fat and BMI
+tend to be stronger at higher quantiles of the BMI distribution,
+highlighting heterogeneity that is not captured by mean regression.
+Parental obesity indicators also show stronger effects among
+higher-BMI individuals.
